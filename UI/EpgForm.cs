@@ -6,7 +6,7 @@ namespace DvbTv.UI;
 /// <summary>
 /// Standalone EPG / channel-info window (separate top-level window — NEVER touches the
 /// video window). Shows the schedule for the currently playing channel with ◄ ► buttons
-/// to step through programmes (each with its description), and a "Τώρα" button to jump
+/// to step through programmes (each with its description), and a "Now" button to jump
 /// back to what's on now. Fed live from the EIT tap. Closing (X) just hides it.
 /// </summary>
 public sealed class EpgForm : Form
@@ -20,9 +20,9 @@ public sealed class EpgForm : Form
         Font = new Font("Segoe UI", 10.5f),
         Padding = new Padding(14),
     };
-    private readonly Button _prev = new() { Text = "◄ Προηγ.", Dock = DockStyle.Left, Width = 95, FlatStyle = FlatStyle.Flat };
-    private readonly Button _next = new() { Text = "Επόμ. ►", Dock = DockStyle.Right, Width = 95, FlatStyle = FlatStyle.Flat };
-    private readonly Button _nowBtn = new() { Text = "● Τώρα", Dock = DockStyle.Fill, FlatStyle = FlatStyle.Flat };
+    private readonly Button _prev = new() { Text = "◄ Prev", Dock = DockStyle.Left, Width = 95, FlatStyle = FlatStyle.Flat };
+    private readonly Button _next = new() { Text = "Next ►", Dock = DockStyle.Right, Width = 95, FlatStyle = FlatStyle.Flat };
+    private readonly Button _nowBtn = new() { Text = "● Now", Dock = DockStyle.Fill, FlatStyle = FlatStyle.Flat };
     private readonly Panel _buttons = new() { Dock = DockStyle.Bottom, Height = 40 };
     private readonly System.Windows.Forms.Timer _timer = new() { Interval = 5000 };
 
@@ -33,7 +33,7 @@ public sealed class EpgForm : Form
     public EpgForm(ITvController tv)
     {
         _tv = tv;
-        Text = "DvbTv — EPG / Πληροφορίες";
+        Text = "DvbTv — EPG / Info";
         Width = 400;
         Height = 500;
         BackColor = Color.FromArgb(28, 28, 30);
@@ -61,7 +61,7 @@ public sealed class EpgForm : Form
     private void Tick()
     {
         var ch = _tv.Current;
-        if (ch is null) { _info.Text = "Διάλεξε κανάλι για να δεις EPG…"; return; }
+        if (ch is null) { _info.Text = "Select a channel to see its EPG…"; return; }
         if (ch.ServiceId != _serviceId) { _serviceId = ch.ServiceId; _followNow = true; JumpToNow(); } // channel changed → reset to now
         else if (_followNow) JumpToNow(); // auto-advance to the live programme as time passes
         ShowEvent();
@@ -88,7 +88,7 @@ public sealed class EpgForm : Form
 
         if (sch.Count == 0)
         {
-            sb.AppendLine("(αναμονή EPG…)");
+            sb.AppendLine("(waiting for EPG…)");
             _info.Text = sb.ToString();
             return;
         }
@@ -96,8 +96,8 @@ public sealed class EpgForm : Form
         _index = Math.Clamp(_index, 0, sch.Count - 1);
         var e = sch[_index];
         var utc = DateTime.UtcNow;
-        string marker = (e.StartUtc <= utc && utc < e.StartUtc + e.Duration) ? "● ΤΩΡΑ"
-                        : e.StartUtc > utc ? "▸ προσεχώς" : "◂ έληξε";
+        string marker = (e.StartUtc <= utc && utc < e.StartUtc + e.Duration) ? "● NOW"
+                        : e.StartUtc > utc ? "▸ upcoming" : "◂ ended";
 
         sb.AppendLine($"[{_index + 1}/{sch.Count}]  {marker}");
         sb.AppendLine();

@@ -1,43 +1,62 @@
 # Architecture — DvbTv
 
-## Γιατί αυτές οι επιλογές
+## Why these choices
 
-| Απόφαση | Γιατί |
+| Decision | Why |
 |---|---|
-| **BDA + DirectShow** (όχι SDR) | Ο RTL2832U σε BDA mode κάνει COFDM demod σε hardware → MPEG-TS. SDR mode (Zadig) δίνει raw IQ → θα απαιτούσε όλο το DVB-T demod σε software (ανέφικτο). |
-| **Hybrid: BDA tune → LibVLCSharp** | Το VLC κάνει demux + decode + render + audio + subs μόνο του. Full-DirectShow EVR = ίδιο αποτέλεσμα με 5× COM boilerplate. |
-| **GPU decode `--avcodec-hw=d3d11va`** | NVDEC της RTX 3060. CPU ~0% στο decode → ελεύθερο για UI/zapping. |
-| **DI (Generic Host) + Serilog** | Κάθε layer mockable/swappable· κάθε βήμα logάρεται → ξέρεις ΠΟΙΟ layer φταίει χωρίς ψάξιμο. |
+| **WinUSB hardware demod** (default) | The RTL2832U has a built-in DVB-T demodulator. Talking to it directly over WinUSB/libusb gives a ready MPEG-TS — no software OFDM, no raw-IQ SDR work. |
+| **LibVLCSharp for playback** | VLC handles demux + decode + render + audio + subtitles on its own. A full DirectShow EVR graph would be the same result with 5× the COM boilerplate. |
+| **GPU decode `--avcodec-hw=d3d11va`** | Uses the GPU's video decoder (NVDEC on NVIDIA). The CPU stays near 0% on decode, free for UI/zapping. |
+| **DI (Generic Host) + Serilog** | Every layer is mockable/swappable, and every step is logged → you know *which* layer failed without guesswork. |
+
+A legacy **DirectShow / BDA** backend is also included for sticks left on the vendor
+driver (`Tv:Tuner = "Bda"`). The stick is WinUSB **xor** BDA.
 
 ## Data flow
+
 ```
-RTL2832U stick :  RF → COFDM demod  →  MPEG-TS        [hardware στο stick, 0% PC CPU]
-BDA/DirectShow :  USB → TS, demux PID                  [ασήμαντο CPU, σκέτο parsing]
-LibVLCSharp    :  TS → H.264/MPEG-2 decode → NVDEC     [RTX 3060, GPU]
-                  decoded frame → D3D11 render → οθόνη  [GPU, zero-copy]
+RTL2832U stick :  RF → COFDM demod  →  MPEG-TS        [hardware on the stick, ~0% PC CPU]
+WinUSB / libusb:  USB bulk transfer → TS, PID parsing [trivial CPU]
+LibVLCSharp    :  TS → H.264/MPEG-2 decode → NVDEC    [GPU]
+                  decoded frame → D3D11 render → screen [GPU, zero-copy]
 ```
 
 ## DI graph (Program.cs)
+
 ```
 MainForm
- └─ ITvController ── TvController
-      ├─ IDvbTuner ───── DvbTuner        (BDA — skeleton)
-      ├─ IVideoPlayer ── VlcVideoPlayer  (LibVLC GPU)
-      └─ IChannelStore ─ JsonChannelStore
- ├─ IChannelScanner ── ChannelScanner    (skeleton· εξαρτάται από IDvbTuner)
+ ├─ ITvController ── TvController
+ │     ├─ IDvbTuner ───── RtlSdrDvbTuner (WinUSB)  | DvbTuner (BDA, legacy)
+ │     ├─ IVideoPlayer ── VlcVideoPlayer  (LibVLC, GPU)
+ │     └─ IChannelStore ─ JsonChannelStore
+ ├─ IChannelScanner ──── ChannelScanner
  ├─ IVideoPlayer  (shared singleton)
  └─ IChannelStore (shared singleton)
 ```
-Όλα `AddSingleton` (ένα stick, ένας player, μία λίστα).
+
+Everything is registered as a singleton (one stick, one player, one channel list).
+
+## Components
+
+| Interface | Implementation | Responsibility |
+|---|---|---|
+| `IDvbTuner` | `RtlSdrDvbTuner` (WinUSB) / `DvbTuner` (BDA) | Tune, signal stats, transport stream, TS capture, EPG schedule |
+| `IVideoPlayer` | `VlcVideoPlayer` | LibVLCSharp, GPU decode, subtitles, volume |
+| `IChannelStore` | `JsonChannelStore` | Channel persistence (`channels.json`) |
+| `IChannelScanner` | `ChannelScanner` | UHF sweep + SI/PSI parse → services |
+| `ITvController` | `TvController` | Orchestrator: tune + feed the player |
+| — | `EitCollector` | Live EPG collector (PID 0x12, present/following + schedule) |
+| — | `MainForm` + `EpgForm` + `WeeklyEpgForm` | WinForms UI: video + control bar + two EPG windows |
+
+The `rtldvb/` class library is a focused port of the RTL2832U + R820T driver
+(`LibUsb`, `RtlDevice`, `Rtl2832Frontend`, `R820tTuner`, I2C/DVB foundations) that
+turns on the chip's hardware demodulator and reads MPEG-TS from the bulk endpoint.
 
 ## Logging strategy
-- Serilog → Console + rolling daily file `logs/dvbtv-<date>.log`, MinimumLevel Debug.
-- Σε κάθε layer ένα `ILogger<T>` (constructor injection).
-- Κρίσιμα events: tune attempt → lock success/fail + signal %, channel-change timing (Stopwatch ms), demux/PID, decode/VLC events (το `LibVLC.Log` γίνεται forward στο `ILogger`).
-- Debug rule: «δεν παίζει κανάλι» → log δείχνει αν έσπασε **lock** (tuner/σήμα), **demux** (PID), ή **decode** (codec/VLC).
 
-## Next milestones (λεπτομέρεια στο SKILL.md)
-1. `DvbTuner` BDA graph (NetworkProvider→Tuner→Receiver→Demux, IDVBTLocator tune, IBDA_SignalStatistics lock). Χρειάζεται DirectShow.NET wrapper **με BDA** — ερεύνησε το σωστό NuGet πρώτα.
-2. TS → VLC bridge (`StreamMediaInput`, ήδη stubbed).
-3. `ChannelScanner` UHF sweep + SI/PSI.
-4. Channel list UI + IR remote zapper.
+- Serilog → Console + a rolling daily file `logs/dvbtv-<date>.log`, minimum level Debug.
+- Each layer gets an injected `ILogger<T>`.
+- Key events: tune attempt → lock success/fail + signal %, channel-change timing,
+  demux/PID, decode/VLC events (LibVLC's own log is forwarded into Serilog).
+- Debug rule: "no picture" → the log shows whether **lock** (tuner/signal),
+  **demux** (PID), or **decode** (codec/VLC) failed.

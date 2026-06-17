@@ -1,8 +1,11 @@
 bin/
 obj/
 logs/
+publish/
 *.user
 channels.json
+# internal Claude knowledge file — not part of the public project
+SKILL.md
 # local test media (not part of the app)
 *.mp4
 *.mkv

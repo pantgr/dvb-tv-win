@@ -42,12 +42,12 @@ public sealed class ChannelScanner : IChannelScanner
             ct.ThrowIfCancellationRequested();
             long freqHz = (474L + (ch - FirstUhfChannel) * 8L) * 1_000_000L;
             double mhz = freqHz / 1_000_000.0;
-            progress?.Report($"Σάρωση CH{ch} ({mhz:F0} MHz)…  [{found.Count} κανάλια]");
+            progress?.Report($"Scanning CH{ch} ({mhz:F0} MHz)…  [{found.Count} channels]");
 
             if (!await _tuner.TuneAsync(new TuneParameters(freqHz, _bandwidthMhz, ScanLockTimeoutMs, Prebuffer: false), ct)) continue;
 
             var s = _tuner.GetSignalStats();
-            progress?.Report($"CH{ch} ({mhz:F0} MHz) lock {s.StrengthPercent}% — διαβάζω κανάλια…");
+            progress?.Report($"CH{ch} ({mhz:F0} MHz) lock {s.StrengthPercent}% — reading channels…");
 
             var ts = await _tuner.CaptureTsAsync(CaptureBytes, CaptureTimeoutMs, ct);
 
@@ -85,7 +85,7 @@ public sealed class ChannelScanner : IChannelScanner
         }
 
         _log.LogInformation("UHF sweep done: {Count} channels", found.Count);
-        progress?.Report($"Σάρωση τέλος · {found.Count} κανάλια");
+        progress?.Report($"Scan done · {found.Count} channels");
         return found;
     }
 }

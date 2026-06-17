@@ -39,16 +39,16 @@ public sealed class WeeklyEpgForm : Form
     public WeeklyEpgForm(ITvController tv)
     {
         _tv = tv;
-        Text = "DvbTv — Εβδομαδιαίο πρόγραμμα";
+        Text = "DvbTv — Weekly schedule";
         Width = 780;
         Height = 660;
         BackColor = Color.FromArgb(28, 28, 30);
         ForeColor = Color.Gainsboro;
         StartPosition = FormStartPosition.Manual;
 
-        _events.Columns.Add("Πότε", 130);
-        _events.Columns.Add("Διάρκεια", 70);
-        _events.Columns.Add("Εκπομπή", 520);
+        _events.Columns.Add("When", 130);
+        _events.Columns.Add("Duration", 70);
+        _events.Columns.Add("Programme", 520);
 
         Controls.Add(_events);   // fill (added first)
         Controls.Add(_desc);     // bottom
@@ -115,7 +115,7 @@ public sealed class WeeklyEpgForm : Form
         _events.EndUpdate();
 
         if (sch.Count == 0)
-            _desc.Text = "(αναμονή EPG για αυτό το κανάλι — παίξ' το λίγο ώστε να μαζευτεί το EIT)";
+            _desc.Text = "(waiting for this channel's EPG — play it for a bit so the EIT is collected)";
     }
 
     private void ShowDesc()

@@ -1,36 +1,41 @@
 # Hardware & Signal — DvbTv
 
-## RTL2832U stick (probe 2026-06-10, winpc `Get-PnpDevice`)
+## RTL2832U stick
 
-Ένα USB Composite device με δύο interfaces + IR remote HID collections:
+A USB composite device with a media interface plus an IR-remote HID collection:
 
 ```
-USB\VID_0BDA&PID_2838                          (USB Composite, usbccgp)
-├─ MI_00  REALTEK 2832U Device   Class MEDIA   Service RTL2832UUSB     ← ο BDA tuner
-├─ MI_01  HID Infrared Remote    Class HID     Service RTL2832U_IRHID  ← IR remote
-├─ COL01  HID Keyboard Device                  Service kbdhid          ← από το remote
-├─ COL02  HID consumer control                                        ← από το remote
-└─ COL03  HID system controller                                       ← από το remote
+USB\VID_0BDA&PID_2838                          (USB Composite)
+├─ MI_00  RTL2832U (DVB-T demodulator)         ← the tuner
+├─ MI_01  HID Infrared Remote                  ← IR remote
+└─ COLxx  HID keyboard / consumer / system     ← from the remote
 ```
 
-**Συμπεράσματα:**
-- **VID 0x0BDA = Realtek**, **PID 0x2838** = κλασικό RTL2832U DVB-T dongle (συνήθως + R820T2 tuner).
-- Driver service **`RTL2832UUSB`** = ο **Realtek DVB/BDA driver** → το stick είναι σε **κανονικό TV mode**, ΟΧΙ Zadig/WinUSB (SDR). 🔴 Μην το γυρίσεις σε WinUSB με Zadig — χάνεις το BDA TV path.
-- **Μόνο ένα MEDIA interface, κανένα MN88472/73** → ο RTL2832U κάνει το demod, που σημαίνει **DVB-T only (όχι DVB-T2)**. Αυτό είναι hardware όριο του chip.
-- IR remote (`RTL2832U_IRHID`) = bonus, μπορεί να γίνει zapper.
+**Notes:**
 
-## Σήμα — Ελλάδα = DVB-T / H.264
+- **VID `0x0BDA` = Realtek**, **PID `0x2838`** = a classic RTL2832U DVB-T dongle,
+  usually paired with an **R820T / R820T2** tuner.
+- This app drives the stick over **WinUSB** (bind it with [Zadig](https://zadig.akeo.ie/)),
+  talking to the chip directly with libusb and enabling its built-in demodulator.
+  A legacy DirectShow/BDA path is also included for sticks on the vendor driver.
+- With a single demodulator on board, the chip does **DVB-T only — not DVB-T2**. This is
+  a hardware limit of the RTL2832U.
+- The IR remote can be repurposed as a channel zapper (future work).
 
-- Πρότυπο μετάδοσης: **DVB-T** (όχι T2), συμπίεση **MPEG-4 part 10 / AVC (H.264)**· κάποια τοπικά ακόμα **MPEG-2**.
-- Digea: 7 εθνικά FTA (Alpha, ANT1, Mega, Skai, Star, Makedonia, κ.ά.), 156 transmitter sites, 96% κάλυψη.
-- DVB-T2 = «επόμενη γενιά», **χωρίς timeline** (μέχρι 2025/2026).
-- **Γι' αυτό το RTL2832U DVB-T stick παίζει όλα τα ελληνικά κανάλια απρόβλητα** (επιβεβαιωμένο εμπειρικά από τον Pantelis 2026-06-10).
+## R820T tuner specifics (WinUSB path)
+
+- Detected by an I2C read at address `0x1a` returning `0x69`.
+- Crystal: **28.8 MHz**.
+- **IMR calibration is mandatory** on init (~2.8 s, once).
+- **Manual gain** — the tuner AGC is unsuitable for DVB-T here, and the RTL2832's
+  built-in AGC is left off.
+
+## Signal — terrestrial DVB-T
+
+- Many European countries (e.g. Greece) broadcast terrestrial TV as **DVB-T** with
+  **MPEG-4 / H.264** (some local muxes still MPEG-2). DVB-T2 rollout varies by region.
 - UHF band, **8 MHz** channel bandwidth.
+- Because the broadcast is DVB-T, a plain RTL2832U DVB-T stick receives it directly.
 
-### ⚠️ Διόρθωση
-Στο πρώτο μου draft είπα με σιγουριά «Ελλάδα = DVB-T2 HEVC» — **λάθος**. Είναι DVB-T/H.264. Ο Pantelis είχε δίκιο ότι το stick παίζει· η αντίφαση λύθηκε εμπειρικά (αφού παίζει & ο RTL2832U κάνει μόνο DVB-T → άρα εκπέμπεται DVB-T).
-
-## Sources
-- Digea — The Evolution of the Digital Era: https://www.digea.gr/en/technological-evolution/the-evolution-of-the-digital-era
-- Digea (Wikipedia): https://en.wikipedia.org/wiki/Digea
-- Digea FAQ: https://digea.gr/en/frequently-asked-questions
+> If your country uses **DVB-T2**, this stick (and app) will **not** demodulate it — the
+> RTL2832U only does DVB-T.
