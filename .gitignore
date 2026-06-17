@@ -1,0 +1,9 @@
+bin/
+obj/
+logs/
+*.user
+channels.json
+# local test media (not part of the app)
+*.mp4
+*.mkv
+*.ts
